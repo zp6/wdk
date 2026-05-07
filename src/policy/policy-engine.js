@@ -79,6 +79,7 @@ import {
 /**
  * @typedef {object} RegisterPolicyOptions
  * @property {object} [state] - Reserved for Phase 2.
+ * @property {number} [conditionTimeoutMs] - Per-condition evaluation timeout in milliseconds. Defaults to 30000. A condition that exceeds the timeout is treated the same as a throw — fail-closed for DENY rules, fail-open-as-no-match for ALLOW rules. Engine-wide; the most recent registerPolicy call's value wins.
  */
 
 /**
@@ -107,10 +108,15 @@ import {
  * (`_relevantOperations`, `_evaluateContext`, `_simulateContext`) are used
  * by the wrapper module.
  */
+const DEFAULT_CONDITION_TIMEOUT_MS = 30_000
+
 export default class PolicyEngine {
   constructor () {
     /** @private */
     this._registry = new PolicyRegistry()
+
+    /** @private */
+    this._conditionTimeoutMs = DEFAULT_CONDITION_TIMEOUT_MS
   }
 
   /**
@@ -137,6 +143,10 @@ export default class PolicyEngine {
 
     for (const policy of list) {
       this._registry.add(policy, chains)
+    }
+
+    if (options?.conditionTimeoutMs !== undefined) {
+      this._conditionTimeoutMs = options.conditionTimeoutMs
     }
   }
 
@@ -177,7 +187,7 @@ export default class PolicyEngine {
   async _evaluateContext (context, { path }) {
     const groups = this._registry.applicable(context.chain, path)
 
-    return evaluate(context, groups)
+    return evaluate(context, groups, { conditionTimeoutMs: this._conditionTimeoutMs })
   }
 
   /** @private */

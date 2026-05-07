@@ -80,6 +80,12 @@ export function validateRegisterOptions (options) {
   if (options.state !== undefined && !isPlainObject(options.state)) {
     throw new PolicyConfigurationError("registerPolicy options: 'state' must be an object.")
   }
+
+  if (options.conditionTimeoutMs !== undefined) {
+    if (typeof options.conditionTimeoutMs !== 'number' || !Number.isFinite(options.conditionTimeoutMs) || options.conditionTimeoutMs <= 0) {
+      throw new PolicyConfigurationError("registerPolicy options: 'conditionTimeoutMs' must be a positive finite number.")
+    }
+  }
 }
 
 /**

@@ -1380,4 +1380,242 @@ describe('WdkManager — policy engine', () => {
       expect(Object.isFrozen(captured)).toBe(true)
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Condition timeouts
+  // -------------------------------------------------------------------------
+
+  describe('condition timeouts', () => {
+    test('a never-resolving condition on an ALLOW rule is timed out and treated as no-match', async () => {
+      getAccountMock.mockResolvedValue(buildAccount())
+
+      wdkManager
+        .registerWallet('ethereum', WalletManagerMock, {})
+        .registerPolicy({
+          id: 'p',
+          name: 'p',
+          scope: 'project',
+          rules: [{
+            name: 'never-resolves',
+            operation: 'sendTransaction',
+            action: 'ALLOW',
+            conditions: [() => new Promise(() => {})]
+          }]
+        }, { conditionTimeoutMs: 25 })
+
+      const account = await wdkManager.getAccount('ethereum', 0)
+      const err = await catchAsync(() => account.sendTransaction({ to: RECIPIENT, value: 1n }))
+
+      expect(err.name).toBe('PolicyViolationError')
+      expect(err.policyId).toBe('<unknown>')
+      expect(err.ruleName).toBe('<unknown>')
+      expect(err.reason).toBe('governed-but-unmatched')
+      expect(sendTransactionMock).not.toHaveBeenCalled()
+    })
+
+    test('a never-resolving condition on a DENY rule is timed out and fail-closes (matches and blocks)', async () => {
+      getAccountMock.mockResolvedValue(buildAccount())
+
+      wdkManager
+        .registerWallet('ethereum', WalletManagerMock, {})
+        .registerPolicy({
+          id: 'sanctions',
+          name: 'sanctions',
+          scope: 'project',
+          rules: [
+            {
+              name: 'block-on-kyt',
+              operation: 'sendTransaction',
+              action: 'DENY',
+              conditions: [() => new Promise(() => {})]
+            },
+            {
+              name: 'allow-general',
+              operation: 'sendTransaction',
+              action: 'ALLOW',
+              conditions: [() => true]
+            }
+          ]
+        }, { conditionTimeoutMs: 25 })
+
+      const account = await wdkManager.getAccount('ethereum', 0)
+      const err = await catchAsync(() => account.sendTransaction({ to: RECIPIENT, value: 1n }))
+
+      expect(err.name).toBe('PolicyViolationError')
+      expect(err.policyId).toBe('sanctions')
+      expect(err.ruleName).toBe('block-on-kyt')
+      expect(err.reason).toBe('block-on-kyt (condition error: condition timed out after 25ms)')
+      expect(sendTransactionMock).not.toHaveBeenCalled()
+    })
+
+    test('rejects non-positive conditionTimeoutMs at registration time', () => {
+      const cases = [-1, 0, NaN, Infinity, '30000', null]
+
+      for (const value of cases) {
+        const err = catchSync(() =>
+          wdkManager.registerPolicy(projectAllowAll('p'), { conditionTimeoutMs: value })
+        )
+
+        expect(err.name).toBe('PolicyConfigurationError')
+        expect(err.message).toBe("registerPolicy options: 'conditionTimeoutMs' must be a positive finite number.")
+      }
+    })
+
+    test('a condition that resolves before the timeout is unaffected', async () => {
+      getAccountMock.mockResolvedValue(buildAccount())
+
+      let invoked = 0
+
+      wdkManager
+        .registerWallet('ethereum', WalletManagerMock, {})
+        .registerPolicy({
+          id: 'p',
+          name: 'p',
+          scope: 'project',
+          rules: [{
+            name: 'r',
+            operation: 'sendTransaction',
+            action: 'ALLOW',
+            conditions: [async () => { invoked++; return true }]
+          }]
+        }, { conditionTimeoutMs: 5_000 })
+
+      const account = await wdkManager.getAccount('ethereum', 0)
+      const result = await account.sendTransaction({ to: RECIPIENT, value: 1n })
+
+      expect(result.hash).toBe(DUMMY_TX_HASH)
+      expect(invoked).toBe(1)
+      expect(sendTransactionMock).toHaveBeenCalledWith({ to: RECIPIENT, value: 1n })
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Fail-closed DENY (throwing condition)
+  // -------------------------------------------------------------------------
+
+  describe('throwing DENY conditions', () => {
+    test('a throwing DENY condition matches (fail-closed) and blocks even when a sibling ALLOW would match', async () => {
+      getAccountMock.mockResolvedValue(buildAccount())
+
+      wdkManager
+        .registerWallet('ethereum', WalletManagerMock, {})
+        .registerPolicy({
+          id: 'sanctions',
+          name: 'sanctions',
+          scope: 'project',
+          rules: [
+            {
+              name: 'block-sanctioned',
+              operation: 'sendTransaction',
+              action: 'DENY',
+              conditions: [() => { throw new Error('KYT service down') }]
+            },
+            {
+              name: 'allow-general',
+              operation: 'sendTransaction',
+              action: 'ALLOW',
+              conditions: [() => true]
+            }
+          ]
+        })
+
+      const account = await wdkManager.getAccount('ethereum', 0)
+      const err = await catchAsync(() => account.sendTransaction({ to: SANCTIONED, value: 1n }))
+
+      expect(err.name).toBe('PolicyViolationError')
+      expect(err.policyId).toBe('sanctions')
+      expect(err.ruleName).toBe('block-sanctioned')
+      expect(err.reason).toBe('block-sanctioned (condition error: KYT service down)')
+      expect(sendTransactionMock).not.toHaveBeenCalled()
+    })
+
+    test('a throwing ALLOW condition is treated as no-match and falls through to other rules', async () => {
+      getAccountMock.mockResolvedValue(buildAccount())
+
+      wdkManager
+        .registerWallet('ethereum', WalletManagerMock, {})
+        .registerPolicy({
+          id: 'p',
+          name: 'p',
+          scope: 'project',
+          rules: [
+            {
+              name: 'allow-throw',
+              operation: 'sendTransaction',
+              action: 'ALLOW',
+              conditions: [() => { throw new Error('boom') }]
+            },
+            {
+              name: 'allow-fallback',
+              operation: 'sendTransaction',
+              action: 'ALLOW',
+              conditions: [() => true]
+            }
+          ]
+        })
+
+      const account = await wdkManager.getAccount('ethereum', 0)
+      const result = await account.sendTransaction({ to: RECIPIENT, value: 1n })
+
+      expect(result.hash).toBe(DUMMY_TX_HASH)
+      expect(sendTransactionMock).toHaveBeenCalledWith({ to: RECIPIENT, value: 1n })
+    })
+
+    test('rule.reason on a DENY with a throwing condition takes precedence over the auto-generated condition-error reason', async () => {
+      getAccountMock.mockResolvedValue(buildAccount())
+
+      wdkManager
+        .registerWallet('ethereum', WalletManagerMock, {})
+        .registerPolicy({
+          id: 'sanctions',
+          name: 'sanctions',
+          scope: 'project',
+          rules: [{
+            name: 'block-sanctioned',
+            reason: 'KYT screening required',
+            operation: 'sendTransaction',
+            action: 'DENY',
+            conditions: [() => { throw new Error('KYT service down') }]
+          }]
+        })
+
+      const account = await wdkManager.getAccount('ethereum', 0)
+      const err = await catchAsync(() => account.sendTransaction({ to: SANCTIONED, value: 1n }))
+
+      expect(err.reason).toBe('KYT screening required')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Defensive deep-clone of rule.state (Phase 2 readiness)
+  // -------------------------------------------------------------------------
+
+  describe('defensive cloning', () => {
+    test('mutating rule.state on the caller side does not affect the engine copy', () => {
+      const state = { value: 'original', nested: { count: 0 } }
+
+      wdkManager.registerPolicy({
+        id: 'p',
+        name: 'p',
+        scope: 'project',
+        rules: [{
+          name: 'r',
+          operation: 'sendTransaction',
+          action: 'ALLOW',
+          state,
+          conditions: [() => true]
+        }]
+      })
+
+      state.value = 'MUTATED'
+      state.nested.count = 99
+
+      const engineCopy = wdkManager._policyEngine._registry._project[0].rules[0].state
+
+      expect(engineCopy.value).toBe('original')
+      expect(engineCopy.nested.count).toBe(0)
+      expect(engineCopy).not.toBe(state)
+      expect(engineCopy.nested).not.toBe(state.nested)
+    })
+  })
 })

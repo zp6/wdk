@@ -1,77 +1,8 @@
-/** @typedef {import('@tetherto/wdk-wallet').IWalletAccountReadOnly} IWalletAccountReadOnly */
-/**
- * @typedef {'ALLOW' | 'DENY'} PolicyAction
- */
-/**
- * @typedef {'project' | 'wallet' | 'account'} PolicyScope
- */
-/**
- * @typedef {'sendTransaction' | 'transfer' | 'approve' | 'signMessage' | 'signHash'
- *   | 'signTypedData' | 'signAuthorization' | 'delegate' | 'revokeDelegation'
- *   | 'swap' | 'bridge' | 'supply' | 'withdraw' | 'borrow' | 'repay' | 'buy' | 'sell'
- *   | '*'} PolicyOperation
- */
-/**
- * @typedef {object} PolicyContext
- * @property {PolicyOperation} operation - The intercepted operation name.
- * @property {string} chain - The blockchain identifier.
- * @property {IWalletAccountReadOnly} account - A read-only view of the wallet account.
- * @property {unknown} params - The first argument to the wrapped method.
- * @property {readonly unknown[]} args - The full argument array.
- */
-/**
- * @typedef {(context: PolicyContext) => boolean | Promise<boolean>} PolicyCondition
- */
-/**
- * @typedef {object} PolicyRule
- * @property {string} name
- * @property {string} [reason] - Optional human-readable explanation. When set on a DENY rule that matches, propagates to PolicyViolationError.reason and to the matching simulate-result. Defaults to the rule's name.
- * @property {PolicyOperation | PolicyOperation[]} operation
- * @property {PolicyAction} action
- * @property {boolean} [override_broader_scope] - When true on an account-scope ALLOW rule that matches, the rule's verdict short-circuits both wallet- and project-scope evaluation. Account-scope rules are evaluated in registration order; the first matching override-flag rule wins. Only valid on account-scope ALLOW rules.
- * @property {PolicyCondition[]} conditions
- * @property {object} [state]                                       Reserved for Phase 2; ignored at runtime.
- * @property {(c: PolicyContext) => void | Promise<void>} [onSuccess]   Reserved for Phase 2; ignored at runtime.
- */
-/**
- * @typedef {object} Policy
- * @property {string} id
- * @property {string} name
- * @property {PolicyScope} scope
- * @property {string[]} [accounts] - Derivation paths the policy applies to (required when scope is 'account'). Exact-string matching only in Phase 1; no prefix or wildcard matching.
- * @property {PolicyRule[]} rules
- */
-/**
- * @typedef {object} RegisterPolicyOptions
- * @property {object} [state] - Reserved for Phase 2.
- */
-/**
- * @typedef {object} SimulationTraceEntry
- * @property {PolicyScope} scope
- * @property {string} policy_id
- * @property {string} rule_name
- * @property {boolean} matched
- * @property {string} [error]
- */
-/**
- * @typedef {object} SimulationResult
- * @property {'ALLOW' | 'DENY'} decision
- * @property {string | null} policy_id
- * @property {string | null} matched_rule
- * @property {string | null} reason
- * @property {SimulationTraceEntry[]} trace
- */
-/**
- * @internal
- *
- * The orchestration façade. Owns the registry; exposes the two methods the
- * `WDK` class calls (`register`, `applyPoliciesTo`). Internal helpers
- * (`_relevantOperations`, `_evaluateContext`, `_simulateContext`) are used
- * by the wrapper module.
- */
 export default class PolicyEngine {
     /** @private */
     private _registry;
+    /** @private */
+    private _conditionTimeoutMs;
     /**
      * Registers one or more policies. Synchronously throws on validation failures.
      *
@@ -173,6 +104,10 @@ export type RegisterPolicyOptions = {
      * - Reserved for Phase 2.
      */
     state?: object;
+    /**
+     * - Per-condition evaluation timeout in milliseconds. Defaults to 30000. A condition that exceeds the timeout is treated the same as a throw — fail-closed for DENY rules, fail-open-as-no-match for ALLOW rules. Engine-wide; the most recent registerPolicy call's value wins.
+     */
+    conditionTimeoutMs?: number;
 };
 export type SimulationTraceEntry = {
     scope: PolicyScope;

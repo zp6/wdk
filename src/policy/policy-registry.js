@@ -144,10 +144,22 @@ function clonePolicy (policy) {
   return {
     ...policy,
     accounts: policy.accounts ? [...policy.accounts] : undefined,
-    rules: policy.rules.map((rule) => ({
-      ...rule,
-      operation: Array.isArray(rule.operation) ? [...rule.operation] : rule.operation,
-      conditions: [...rule.conditions]
-    }))
+    rules: policy.rules.map(cloneRule)
   }
+}
+
+function cloneRule (rule) {
+  const cloned = {
+    ...rule,
+    operation: Array.isArray(rule.operation) ? [...rule.operation] : rule.operation,
+    conditions: [...rule.conditions]
+  }
+
+  // Phase 2 reservation: rule.state is engine-managed at runtime in Phase 2.
+  // Deep clone here so the caller's reference cannot be mutated post-registration.
+  if (rule.state !== undefined) {
+    cloned.state = structuredClone(rule.state)
+  }
+
+  return cloned
 }

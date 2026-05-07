@@ -13,11 +13,14 @@
  * @internal
  * @param {object} context
  * @param {{ account: object[], wallet: object[], project: object[] }} groups
+ * @param {{ conditionTimeoutMs: number }} options
  */
 export function evaluate(context: object, groups: {
     account: object[];
     wallet: object[];
     project: object[];
+}, options: {
+    conditionTimeoutMs: number;
 }): Promise<{
     outcome: string;
     policyId: any;

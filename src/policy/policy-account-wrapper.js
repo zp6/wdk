@@ -14,8 +14,6 @@
 
 'use strict'
 
-import { AsyncLocalStorage } from 'node:async_hooks'
-
 import { PROTOCOL_METHODS } from './constants.js'
 import { buildContext } from './policy-context.js'
 import PolicyViolationError, { PolicyConfigurationError } from './policy-error.js'
@@ -29,14 +27,29 @@ const PROTOCOL_GETTERS = [
   ['getFiatProtocol', 'fiat']
 ]
 
-// Tracks "we are currently inside a policy-evaluated call" along the async
-// execution chain. Using AsyncLocalStorage instead of an account-level flag
-// is essential for correctness: the per-account flag breaks under concurrent
-// external calls on the same account (call B sees A's in-flight flag and
-// bypasses evaluation). AsyncLocalStorage scopes the marker to the async
-// chain that set it, so concurrent calls evaluate independently while
-// nested calls within one chain still skip re-evaluation correctly.
-const policyContextStore = new AsyncLocalStorage()
+// node:async_hooks is loaded lazily so that just importing WDK on the Bare
+// runtime — where bare-async-hooks does not export AsyncLocalStorage — does
+// not break consumers that never register a policy. The error only surfaces
+// when policies are actually wrapped onto an account.
+let policyContextStorePromise = null
+
+function getPolicyContextStore () {
+  if (policyContextStorePromise) return policyContextStorePromise
+
+  policyContextStorePromise = (async () => {
+    try {
+      const mod = await import('node:async_hooks')
+
+      if (typeof mod.AsyncLocalStorage !== 'function') return null
+
+      return new mod.AsyncLocalStorage()
+    } catch {
+      return null
+    }
+  })()
+
+  return policyContextStorePromise
+}
 
 /**
  * Wraps every write method on the given account that's referenced by a
@@ -64,6 +77,14 @@ export async function applyPoliciesToAccount (account, { blockchain, path, engin
     )
   }
 
+  const store = await getPolicyContextStore()
+
+  if (store === null) {
+    throw new PolicyConfigurationError(
+      'policy engine requires AsyncLocalStorage from node:async_hooks; the current runtime does not provide it.'
+    )
+  }
+
   const readOnlyAccount = await account.toReadOnlyAccount()
 
   const wrappedNames = []
@@ -78,7 +99,8 @@ export async function applyPoliciesToAccount (account, { blockchain, path, engin
         account,
         readOnlyAccount,
         blockchain,
-        engine
+        engine,
+        store
       })
 
       wrappedNames.push(op)
@@ -108,7 +130,8 @@ export async function applyPoliciesToAccount (account, { blockchain, path, engin
           account,
           readOnlyAccount,
           blockchain,
-          engine
+          engine,
+          store
         })
       }
 
@@ -125,9 +148,9 @@ export async function applyPoliciesToAccount (account, { blockchain, path, engin
   })
 }
 
-function makeWrappedMethod ({ name, original, account, readOnlyAccount, blockchain, engine }) {
+function makeWrappedMethod ({ name, original, account, readOnlyAccount, blockchain, engine, store }) {
   return async function (...args) {
-    if (policyContextStore.getStore()?.inPolicy) {
+    if (store.getStore()?.inPolicy) {
       return original(...args)
     }
 
@@ -148,7 +171,7 @@ function makeWrappedMethod ({ name, original, account, readOnlyAccount, blockcha
       )
     }
 
-    return policyContextStore.run({ inPolicy: true }, () => original(...args))
+    return store.run({ inPolicy: true }, () => original(...args))
   }
 }
 

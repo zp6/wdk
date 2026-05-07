@@ -31,8 +31,9 @@ import { ruleAddressesOperation } from './policy-validators.js'
  * @internal
  * @param {object} context
  * @param {{ account: object[], wallet: object[], project: object[] }} groups
+ * @param {{ conditionTimeoutMs: number }} options
  */
-export async function evaluate (context, groups) {
+export async function evaluate (context, groups, options) {
   const trace = []
 
   const anyAddresses =
@@ -46,16 +47,16 @@ export async function evaluate (context, groups) {
 
   const recordedAllows = []
 
-  const a = await evalGroup(groups.account, context, trace, 'account', { allowOverride: true })
+  const a = await evalGroup(groups.account, context, trace, 'account', { allowOverride: true, ...options })
   if (a.kind === 'DENY') return makeBlock(a.policyId, a.ruleName, a.reason, trace)
   if (a.kind === 'ALLOW_FINAL') return makeAllow(a.policyId, a.ruleName, 'override', trace)
   recordedAllows.push(...a.allows)
 
-  const b = await evalGroup(groups.wallet, context, trace, 'wallet', { allowOverride: false })
+  const b = await evalGroup(groups.wallet, context, trace, 'wallet', { allowOverride: false, ...options })
   if (b.kind === 'DENY') return makeBlock(b.policyId, b.ruleName, b.reason, trace)
   recordedAllows.push(...b.allows)
 
-  const c = await evalGroup(groups.project, context, trace, 'project', { allowOverride: false })
+  const c = await evalGroup(groups.project, context, trace, 'project', { allowOverride: false, ...options })
   if (c.kind === 'DENY') return makeBlock(c.policyId, c.ruleName, c.reason, trace)
   recordedAllows.push(...c.allows)
 
@@ -78,14 +79,15 @@ function addresses (policies, operation) {
   return false
 }
 
-async function evalGroup (policies, context, trace, scope, { allowOverride }) {
+async function evalGroup (policies, context, trace, scope, { allowOverride, conditionTimeoutMs }) {
   const allows = []
 
   for (const policy of policies) {
     for (const rule of policy.rules) {
       if (!ruleAddressesOperation(rule, context.operation)) continue
 
-      const { matched, error } = await evalConditions(rule.conditions, context)
+      const failClose = rule.action === 'DENY'
+      const { matched, error } = await evalConditions(rule.conditions, context, { conditionTimeoutMs, failClose })
 
       trace.push({
         scope,
@@ -98,7 +100,11 @@ async function evalGroup (policies, context, trace, scope, { allowOverride }) {
       if (!matched) continue
 
       if (rule.action === 'DENY') {
-        return { kind: 'DENY', policyId: policy.id, ruleName: rule.name, reason: rule.reason ?? rule.name }
+        const reason = error !== undefined
+          ? (rule.reason ?? `${rule.name} (condition error: ${error})`)
+          : (rule.reason ?? rule.name)
+
+        return { kind: 'DENY', policyId: policy.id, ruleName: rule.name, reason }
       }
 
       if (allowOverride && rule.override_broader_scope === true) {
@@ -116,25 +122,50 @@ async function evalGroup (policies, context, trace, scope, { allowOverride }) {
  * Evaluates a rule's conditions in order, short-circuiting on the first false.
  *
  * The catch is deliberately broad: condition functions are arbitrary
- * developer-supplied code that can throw any value (sync or async). Treating
- * any throw as "rule does not engage" and recording it on the trace is the
- * safe default — a buggy condition must not be allowed to break the user's
- * transaction or accidentally engage other rules.
+ * developer-supplied code that can throw any value (sync or async).
+ *
+ * Fail mode depends on rule action:
+ *   - ALLOW rules: a throwing condition is treated as no-match (fail-open as
+ *     non-engagement). The DENY-wins layer above still ensures we err safe
+ *     when a sibling DENY catches it.
+ *   - DENY rules: a throwing condition is treated as a match (fail-closed).
+ *     This prevents an attacker from bypassing a DENY by causing its
+ *     backing service (e.g. KYT lookup) to throw — when uncertainty
+ *     surrounds a deny, block.
+ *
+ * Each condition is also raced against `conditionTimeoutMs`. A timeout is
+ * surfaced as a throw and follows the same fail-mode rules above.
  */
-async function evalConditions (conditions, context) {
+async function evalConditions (conditions, context, { conditionTimeoutMs, failClose }) {
   for (const condition of conditions) {
     try {
-      const result = await condition(context)
+      const result = await withTimeout(Promise.resolve(condition(context)), conditionTimeoutMs)
 
       if (!result) return { matched: false, error: undefined }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
 
-      return { matched: false, error: message }
+      return { matched: failClose, error: message }
     }
   }
 
   return { matched: true, error: undefined }
+}
+
+async function withTimeout (promise, ms) {
+  let timer
+
+  const timeoutPromise = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`condition timed out after ${ms}ms`)), ms)
+
+    if (typeof timer.unref === 'function') timer.unref()
+  })
+
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function makeAllow (policyId, ruleName, reason, trace) {
