@@ -4,7 +4,7 @@
  * by them have their write methods wrapped too. Also attaches an
  * `account.simulate.*` mirror that runs evaluation without execution.
  *
- * If no registered policy applies to (chain, path, index), this is a no-op.
+ * If no registered policy applies to (wallet, path, index), this is a no-op.
  *
  * @internal
  * @param {IWalletAccount} account - The runtime account instance to mutate.

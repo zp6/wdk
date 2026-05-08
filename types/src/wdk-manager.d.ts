@@ -82,13 +82,17 @@ export default class WDK {
      * Registers one or more transaction policies that will be evaluated before
      * any wrapped account or protocol method is allowed to execute.
      *
-     * The first argument may be a chain name (string), a list of chain names
-     * (string[]), or omitted entirely. When omitted, the policies are project-
-     * scoped only — applicable across every registered wallet. When provided,
-     * wallet- and account-scope policies are bound to those specific chains.
+     * The first argument may be a wallet identifier (string), a list of
+     * wallet identifiers (string[]), or omitted entirely. The wallet identifier
+     * is the same string passed to `registerWallet` — it might be a chain name
+     * like `"ethereum"`, but it could equally be `"treasury-cold"` or any
+     * label the consumer chose. When omitted, project-scope policies are
+     * applied across every registered wallet. When provided, project-scope
+     * policies are narrowed to those wallets and account-scope policies are
+     * bound to them.
      *
      * Multiple `registerPolicy` calls stack. If a policy with the same id is
-     * registered twice into the same chain binding, the second call replaces
+     * registered twice into the same wallet binding, the second call replaces
      * the first.
      *
      * @overload
@@ -99,12 +103,12 @@ export default class WDK {
     registerPolicy(policies: Policy | Policy[], options?: RegisterPolicyOptions): WDK;
     /**
      * @overload
-     * @param {string | string[]} chain
+     * @param {string | string[]} wallet
      * @param {Policy | Policy[]} policies
      * @param {RegisterPolicyOptions} [options]
      * @returns {WDK}
      */
-    registerPolicy(chain: string | string[], policies: Policy | Policy[], options?: RegisterPolicyOptions): WDK;
+    registerPolicy(wallet: string | string[], policies: Policy | Policy[], options?: RegisterPolicyOptions): WDK;
     /**
      * Returns the wallet account for a specific blockchain and index (see BIP-44).
      *

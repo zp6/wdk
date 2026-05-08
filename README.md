@@ -57,7 +57,7 @@ wdk.dispose()
 - **Multi-Chain Operations**: Coordinate balances, fee lookups, and transaction flows across registered chains
 - **Protocol Registration Support**: Attach swap, bridge, lending, and fiat protocols to registered blockchains
 - **Middleware Hooks**: Intercept account derivation with custom middleware
-- **Transaction Policies**: Local policy engine that intercepts write-facing operations and enforces user-defined ALLOW/DENY rules at project (global or chain-bound) and account scopes — with simulation, nested-call handling, and structured `PolicyViolationError`s
+- **Transaction Policies**: Local policy engine that intercepts write-facing operations and enforces user-defined ALLOW/DENY rules at project (global or wallet-bound) and account scopes — with simulation, nested-call handling, and structured `PolicyViolationError`s
 - **Seed Utilities**: Generate and validate BIP-39 seed phrases
 - **Selective Disposal**: Dispose specific registered wallets or clear the full WDK instance
 
@@ -98,7 +98,7 @@ const result = await account.simulate.sendTransaction({ to: '0x…', value: 1n }
 // → { decision: 'ALLOW' | 'DENY', policy_id, matched_rule, reason, trace }
 ```
 
-Policies have two scopes — `project` and `account`. A project-scope policy applies globally by default, or only to the chains you bind it to (`wdk.registerPolicy('ethereum', policy)` or `wdk.registerPolicy(['ethereum', 'ton'], policy)`). An account-scope policy targets specific accounts, identified by either derivation path (`accounts: ["0'/0/0"]`) or integer index (`accounts: [0, 1]`) — index entries match accounts retrieved via `wdk.getAccount(chain, index)`; path entries match either retrieval style. Evaluation is narrowest-first with `DENY` winning across scopes. Account-scope `ALLOW` rules can opt into `override_broader_scope: true` to short-circuit broader policies for explicit exceptions (e.g., treasury wallets). Conditions can be sync or async and may carry user-owned state via closures. Templates (`@tetherto/wdk-policy-templates`) and a portal UI for editing policies are coming in later phases.
+Policies have two scopes — `project` and `account`. A project-scope policy applies globally by default, or only to the wallets you bind it to (`wdk.registerPolicy('ethereum', policy)` or `wdk.registerPolicy(['ethereum', 'ton'], policy)`). The first argument is a wallet identifier — the same string passed to `registerWallet`. It might be a chain name like `"ethereum"`, but it could equally be `"treasury-cold"` or any label the consumer chose; the engine treats it as an opaque key. An account-scope policy targets specific accounts within a wallet, identified by either derivation path (`accounts: ["0'/0/0"]`) or integer index (`accounts: [0, 1]`) — index entries match accounts retrieved via `wdk.getAccount(wallet, index)`; path entries match either retrieval style. Evaluation is narrowest-first with `DENY` winning across scopes. Account-scope `ALLOW` rules can opt into `override_broader_scope: true` to short-circuit broader policies for explicit exceptions (e.g., treasury accounts). Conditions can be sync or async and may carry user-owned state via closures. Templates (`@tetherto/wdk-policy-templates`) and a portal UI for editing policies are coming in later phases.
 
 ### Runtime support
 

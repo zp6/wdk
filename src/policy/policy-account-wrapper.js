@@ -34,7 +34,7 @@ const PROTOCOL_GETTERS = [
  * by them have their write methods wrapped too. Also attaches an
  * `account.simulate.*` mirror that runs evaluation without execution.
  *
- * If no registered policy applies to (chain, path, index), this is a no-op.
+ * If no registered policy applies to (wallet, path, index), this is a no-op.
  *
  * @internal
  * @param {IWalletAccount} account - The runtime account instance to mutate.
@@ -131,7 +131,7 @@ function makeWrappedMethod ({ name, original, account, readOnlyAccount, blockcha
 
     const context = buildContext({
       operation: name,
-      chain: blockchain,
+      wallet: blockchain,
       account: readOnlyAccount,
       args
     })
@@ -157,7 +157,7 @@ function attachSimulateMirror ({ account, readOnlyAccount, blockchain, index, en
     simulate[name] = async (...args) => {
       const context = buildContext({
         operation: name,
-        chain: blockchain,
+        wallet: blockchain,
         account: readOnlyAccount,
         args
       })
@@ -178,7 +178,7 @@ function attachSimulateMirror ({ account, readOnlyAccount, blockchain, index, en
         out[method] = async (...args) => {
           const context = buildContext({
             operation: method,
-            chain: blockchain,
+            wallet: blockchain,
             account: readOnlyAccount,
             args
           })

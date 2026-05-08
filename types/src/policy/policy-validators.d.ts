@@ -1,12 +1,12 @@
 /**
- * Normalises the chain argument from a registerPolicy call into an array of
- * non-empty strings or `undefined` (meaning "apply to every registered chain").
+ * Normalises the wallet argument from a registerPolicy call into an array of
+ * non-empty strings or `undefined` (meaning "apply to every registered wallet").
  *
  * @internal
- * @param {string | string[] | undefined} chain
+ * @param {string | string[] | undefined} wallet
  * @returns {string[] | undefined}
  */
-export function normaliseChainArg(chain: string | string[] | undefined): string[] | undefined;
+export function normaliseWalletArg(wallet: string | string[] | undefined): string[] | undefined;
 /**
  * Validates a registerPolicy options bag (currently only `state`, reserved for Phase 2).
  *
@@ -19,9 +19,9 @@ export function validateRegisterOptions(options: object | undefined): void;
  *
  * @internal
  * @param {object} policy - The policy to validate.
- * @param {string[] | undefined} chains - The chain(s) the policy is being registered for, after normalisation.
+ * @param {string[] | undefined} wallets - The wallet(s) the policy is being registered for, after normalisation.
  */
-export function validatePolicy(policy: object, chains: string[] | undefined): void;
+export function validatePolicy(policy: object, wallets: string[] | undefined): void;
 /**
  * Returns true if the given rule addresses the supplied operation.
  *

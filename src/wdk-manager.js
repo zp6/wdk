@@ -173,13 +173,17 @@ export default class WDK {
    * Registers one or more transaction policies that will be evaluated before
    * any wrapped account or protocol method is allowed to execute.
    *
-   * The first argument may be a chain name (string), a list of chain names
-   * (string[]), or omitted entirely. When omitted, the policies are project-
-   * scoped only — applicable across every registered wallet. When provided,
-   * wallet- and account-scope policies are bound to those specific chains.
+   * The first argument may be a wallet identifier (string), a list of
+   * wallet identifiers (string[]), or omitted entirely. The wallet identifier
+   * is the same string passed to `registerWallet` — it might be a chain name
+   * like `"ethereum"`, but it could equally be `"treasury-cold"` or any
+   * label the consumer chose. When omitted, project-scope policies are
+   * applied across every registered wallet. When provided, project-scope
+   * policies are narrowed to those wallets and account-scope policies are
+   * bound to them.
    *
    * Multiple `registerPolicy` calls stack. If a policy with the same id is
-   * registered twice into the same chain binding, the second call replaces
+   * registered twice into the same wallet binding, the second call replaces
    * the first.
    *
    * @overload
@@ -189,53 +193,53 @@ export default class WDK {
    */
   /**
    * @overload
-   * @param {string | string[]} chain
+   * @param {string | string[]} wallet
    * @param {Policy | Policy[]} policies
    * @param {RegisterPolicyOptions} [options]
    * @returns {WDK}
    */
   /**
-   * @param {string | string[] | Policy | Policy[]} chainOrPolicies
+   * @param {string | string[] | Policy | Policy[]} walletOrPolicies
    * @param {Policy | Policy[] | RegisterPolicyOptions} [policiesOrOptions]
    * @param {RegisterPolicyOptions} [maybeOptions]
    * @returns {WDK}
    */
-  registerPolicy (chainOrPolicies, policiesOrOptions, maybeOptions) {
-    let chain
+  registerPolicy (walletOrPolicies, policiesOrOptions, maybeOptions) {
+    let wallet
     let policies
     let options
 
-    if (typeof chainOrPolicies === 'string' || Array.isArray(chainOrPolicies)) {
-      const isPolicyArray = Array.isArray(chainOrPolicies) &&
-        chainOrPolicies.length > 0 &&
-        chainOrPolicies.every((entry) => typeof entry === 'object' && entry !== null && !Array.isArray(entry))
+    if (typeof walletOrPolicies === 'string' || Array.isArray(walletOrPolicies)) {
+      const isPolicyArray = Array.isArray(walletOrPolicies) &&
+        walletOrPolicies.length > 0 &&
+        walletOrPolicies.every((entry) => typeof entry === 'object' && entry !== null && !Array.isArray(entry))
 
       if (isPolicyArray) {
-        chain = undefined
-        policies = chainOrPolicies
+        wallet = undefined
+        policies = walletOrPolicies
         options = policiesOrOptions
       } else {
-        chain = chainOrPolicies
+        wallet = walletOrPolicies
         policies = policiesOrOptions
         options = maybeOptions
       }
     } else {
-      chain = undefined
-      policies = chainOrPolicies
+      wallet = undefined
+      policies = walletOrPolicies
       options = policiesOrOptions
     }
 
-    if (Array.isArray(chain)) {
-      for (const c of chain) {
-        if (typeof c === 'string' && c.length > 0 && !this._wallets.has(c)) {
-          throw new PolicyConfigurationError(`registerPolicy: no wallet registered for blockchain '${c}'.`)
+    if (Array.isArray(wallet)) {
+      for (const w of wallet) {
+        if (typeof w === 'string' && w.length > 0 && !this._wallets.has(w)) {
+          throw new PolicyConfigurationError(`registerPolicy: no wallet registered with identifier '${w}'.`)
         }
       }
-    } else if (typeof chain === 'string' && !this._wallets.has(chain)) {
-      throw new PolicyConfigurationError(`registerPolicy: no wallet registered for blockchain '${chain}'.`)
+    } else if (typeof wallet === 'string' && !this._wallets.has(wallet)) {
+      throw new PolicyConfigurationError(`registerPolicy: no wallet registered with identifier '${wallet}'.`)
     }
 
-    this._policyEngine.register(chain, policies, options)
+    this._policyEngine.register(wallet, policies, options)
 
     return this
   }
@@ -321,7 +325,7 @@ export default class WDK {
       if (!blockchains || blockchains.includes(blockchain)) {
         wallet.dispose()
         this._wallets.delete(blockchain)
-        this._policyEngine.disposeChain(blockchain)
+        this._policyEngine.disposeWallet(blockchain)
       }
     }
 

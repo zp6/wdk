@@ -117,7 +117,7 @@ describe('WdkManager — policy engine', () => {
       expect(result).toBe(wdkManager)
     })
 
-    test('accepts a chain name as first argument', () => {
+    test('accepts a wallet identifier as first argument', () => {
       wdkManager.registerWallet('ethereum', WalletManagerMock, {})
 
       const result = wdkManager.registerPolicy('ethereum', projectAllowAll('p'))
@@ -125,7 +125,7 @@ describe('WdkManager — policy engine', () => {
       expect(result).toBe(wdkManager)
     })
 
-    test('accepts a chain array as first argument', () => {
+    test('accepts a wallet identifier array as first argument', () => {
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
         .registerWallet('ton', WalletManagerMock, {})
@@ -151,11 +151,11 @@ describe('WdkManager — policy engine', () => {
       expect(result).toBe(wdkManager)
     })
 
-    test('throws PolicyConfigurationError when chain is not registered', () => {
+    test('throws PolicyConfigurationError when wallet is not registered', () => {
       const err = catchSync(() => wdkManager.registerPolicy('mars', projectAllowAll('p')))
 
       expect(err.name).toBe('PolicyConfigurationError')
-      expect(err.message).toBe("registerPolicy: no wallet registered for blockchain 'mars'.")
+      expect(err.message).toBe("registerPolicy: no wallet registered with identifier 'mars'.")
     })
 
     test("throws PolicyConfigurationError on missing 'id'", () => {
@@ -228,14 +228,14 @@ describe('WdkManager — policy engine', () => {
       expect(err.message).toBe("Rule 'r' in policy 'p': condition at index 0 must be a function.")
     })
 
-    test('throws PolicyConfigurationError on account-scope without chain', () => {
+    test('throws PolicyConfigurationError on account-scope without wallet', () => {
       wdkManager.registerWallet('ethereum', WalletManagerMock, {})
 
       const policy = { id: 'p', name: 'p', scope: 'account', accounts: [PATH_DEFAULT], rules: [{ name: 'r', operation: 'sendTransaction', action: 'ALLOW', conditions: [] }] }
       const err = catchSync(() => wdkManager.registerPolicy(policy))
 
       expect(err.name).toBe('PolicyConfigurationError')
-      expect(err.message).toBe("Policy 'p': account-scope policies must be registered with a chain argument.")
+      expect(err.message).toBe("Policy 'p': account-scope policies must be registered with a wallet argument.")
     })
 
     test('throws PolicyConfigurationError when accounts is provided on non-account scope', () => {
@@ -268,7 +268,7 @@ describe('WdkManager — policy engine', () => {
       expect(result.hash).toBe(DUMMY_TX_HASH)
     })
 
-    test('a second registration with the same id replaces the first in the same chain bucket', async () => {
+    test('a second registration with the same id replaces the first in the same wallet bucket', async () => {
       getAccountMock.mockResolvedValue(buildAccount())
 
       wdkManager
@@ -315,7 +315,7 @@ describe('WdkManager — policy engine', () => {
   // -------------------------------------------------------------------------
 
   describe('dispose', () => {
-    test('disposing a single chain stops chain-bound project policies on that chain after re-register', async () => {
+    test('disposing a single wallet stops wallet-bound project policies on that wallet after re-register', async () => {
       getAccountMock.mockResolvedValue(buildAccount())
 
       wdkManager
@@ -352,7 +352,7 @@ describe('WdkManager — policy engine', () => {
       expect(result.hash).toBe(DUMMY_TX_HASH)
     })
 
-    test('disposing one chain narrows a multi-chain project policy and leaves other chains intact', async () => {
+    test('disposing one wallet narrows a multi-wallet project policy and leaves other wallets intact', async () => {
       getAccountMock.mockImplementation(async () => buildAccount())
 
       wdkManager
@@ -736,7 +736,7 @@ describe('WdkManager — policy engine', () => {
   // -------------------------------------------------------------------------
 
   describe('evaluation — multi-scope', () => {
-    test('a chain-bound project DENY shadows an account-scope ALLOW (no override)', async () => {
+    test('a wallet-bound project DENY shadows an account-scope ALLOW (no override)', async () => {
       getAccountMock.mockResolvedValue(buildAccount())
 
       wdkManager
@@ -800,7 +800,7 @@ describe('WdkManager — policy engine', () => {
       expect(err.ruleName).toBe('block-bad')
     })
 
-    test('an account-scope ALLOW with override_broader_scope skips both chain-bound and global project DENYs', async () => {
+    test('an account-scope ALLOW with override_broader_scope skips both wallet-bound and global project DENYs', async () => {
       getAccountMock.mockResolvedValue(buildAccount())
 
       wdkManager
@@ -904,8 +904,8 @@ describe('WdkManager — policy engine', () => {
   // Multi-chain registration
   // -------------------------------------------------------------------------
 
-  describe('multi-chain registration', () => {
-    test('registerPolicy with a chain array binds the same policy to each chain independently', async () => {
+  describe('multi-wallet registration', () => {
+    test('registerPolicy with a wallet array binds the same policy to each wallet independently', async () => {
       getAccountMock.mockImplementation(async () => buildAccount())
 
       wdkManager
@@ -1336,7 +1336,7 @@ describe('WdkManager — policy engine', () => {
   // -------------------------------------------------------------------------
 
   describe('context object', () => {
-    test('the condition function receives operation, chain, params, args, and a read-only account', async () => {
+    test('the condition function receives operation, wallet, params, args, and a read-only account', async () => {
       let captured
 
       getAccountMock.mockResolvedValue(buildAccount())
@@ -1359,7 +1359,7 @@ describe('WdkManager — policy engine', () => {
       await account.sendTransaction({ to: RECIPIENT, value: 7n }, { gas: 21000 })
 
       expect(captured.operation).toBe('sendTransaction')
-      expect(captured.chain).toBe('base')
+      expect(captured.wallet).toBe('base')
       expect(captured.params).toEqual({ to: RECIPIENT, value: 7n })
       expect(captured.args).toHaveLength(2)
       expect(captured.args[0]).toEqual({ to: RECIPIENT, value: 7n })
@@ -1613,8 +1613,8 @@ describe('WdkManager — policy engine', () => {
   // Project-scope chain narrowing
   // -------------------------------------------------------------------------
 
-  describe('chain-bound project policies', () => {
-    test('a project policy registered with a chain only applies to that chain', async () => {
+  describe('wallet-bound project policies', () => {
+    test('a project policy registered with a wallet only applies to that wallet', async () => {
       getAccountMock.mockImplementation(async () => buildAccount())
 
       wdkManager
@@ -1638,7 +1638,7 @@ describe('WdkManager — policy engine', () => {
       expect(tonResult.hash).toBe(DUMMY_TX_HASH)
     })
 
-    test('a project policy with no chain binding applies to every chain', async () => {
+    test('a project policy with no wallet binding applies to every wallet', async () => {
       getAccountMock.mockImplementation(async () => buildAccount())
 
       wdkManager
@@ -1662,7 +1662,7 @@ describe('WdkManager — policy engine', () => {
   // -------------------------------------------------------------------------
 
   describe('account identifiers', () => {
-    test("accounts as integer indexes match the index passed to wdk.getAccount(chain, index)", async () => {
+    test('accounts as integer indexes match the index passed to wdk.getAccount(wallet, index)', async () => {
       getAccountMock.mockImplementation(async (idx) => buildAccount(`0'/0/${idx}`))
 
       wdkManager
@@ -1730,7 +1730,7 @@ describe('WdkManager — policy engine', () => {
       expect(result.hash).toBe(DUMMY_TX_HASH)
     })
 
-    test("a path entry matches accounts retrieved via either getAccount(chain, index) or getAccountByPath(chain, path)", async () => {
+    test('a path entry matches accounts retrieved via either getAccount(wallet, index) or getAccountByPath(wallet, path)', async () => {
       getAccountMock.mockImplementation(async (idx) => buildAccount(`0'/0/${idx}`))
       getAccountByPathMock.mockResolvedValue(buildAccount("0'/0/5"))
 

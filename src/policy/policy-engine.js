@@ -20,7 +20,7 @@ import { evaluate } from './policy-evaluator.js'
 import PolicyRegistry from './policy-registry.js'
 import {
   collectReferencedOperations,
-  normaliseChainArg,
+  normaliseWalletArg,
   validatePolicy,
   validateRegisterOptions
 } from './policy-validators.js'
@@ -45,7 +45,7 @@ import {
 /**
  * @typedef {object} PolicyContext
  * @property {PolicyOperation} operation - The intercepted operation name.
- * @property {string} chain - The blockchain identifier.
+ * @property {string} wallet - The wallet identifier (the same string passed to `wdk.registerWallet`). Despite the name, this is an opaque key chosen by the consumer — it might be a chain name like `"ethereum"`, but it could equally be `"treasury-cold"` or any other label.
  * @property {IWalletAccountReadOnly} account - A read-only view of the wallet account.
  * @property {unknown} params - The first argument to the wrapped method.
  * @property {readonly unknown[]} args - The full argument array.
@@ -76,7 +76,7 @@ import {
  * @property {string} id
  * @property {string} name
  * @property {PolicyScope} scope
- * @property {AccountIdentifier[]} [accounts] - The accounts this policy applies to (required when scope is 'account'). Each entry is either a derivation path (exact-string match against `account.path`) or a non-negative integer (match against the index passed to `wdk.getAccount(chain, index)`). Index entries do not match accounts retrieved via `getAccountByPath` — use derivation paths if you need both retrieval styles to work.
+ * @property {AccountIdentifier[]} [accounts] - The accounts this policy applies to (required when scope is 'account'). Each entry is either a derivation path (exact-string match against `account.path`) or a non-negative integer (match against the index passed to `wdk.getAccount(wallet, index)`). Index entries do not match accounts retrieved via `getAccountByPath` — use derivation paths if you need both retrieval styles to work.
  * @property {PolicyRule[]} rules
  */
 
@@ -126,12 +126,12 @@ export default class PolicyEngine {
   /**
    * Registers one or more policies. Synchronously throws on validation failures.
    *
-   * @param {string | string[] | undefined} chain
+   * @param {string | string[] | undefined} wallet
    * @param {Policy | Policy[]} policies
    * @param {RegisterPolicyOptions} [options]
    */
-  register (chain, policies, options) {
-    const chains = normaliseChainArg(chain)
+  register (wallet, policies, options) {
+    const wallets = normaliseWalletArg(wallet)
 
     validateRegisterOptions(options)
 
@@ -142,11 +142,11 @@ export default class PolicyEngine {
     }
 
     for (const policy of list) {
-      validatePolicy(policy, chains)
+      validatePolicy(policy, wallets)
     }
 
     for (const policy of list) {
-      this._registry.add(policy, chains)
+      this._registry.add(policy, wallets)
     }
 
     if (options?.conditionTimeoutMs !== undefined) {
@@ -159,21 +159,22 @@ export default class PolicyEngine {
    *
    * @param {object} account
    * @param {object} ctx
-   * @param {string} ctx.blockchain
+   * @param {string} ctx.blockchain - The wallet identifier (named `blockchain` here to match the WDK manager's existing API; the policy engine treats it as an opaque wallet key).
    * @param {string | undefined} ctx.path
-   * @param {number | undefined} [ctx.index] - The index passed to `wdk.getAccount(chain, index)`, when known. Used to match index-form entries in `policy.accounts`.
+   * @param {number | undefined} [ctx.index] - The index passed to `wdk.getAccount(wallet, index)`, when known. Used to match index-form entries in `policy.accounts`.
    */
   async applyPoliciesTo (account, { blockchain, path, index }) {
     await applyPoliciesToAccount(account, { blockchain, path, index, engine: this })
   }
 
   /**
-   * Removes wallet- and account-bound policies for the given chain.
+   * Removes account-scope and chain-bound project policies registered under
+   * the given wallet identifier.
    *
-   * @param {string} chain
+   * @param {string} wallet
    */
-  disposeChain (chain) {
-    this._registry.disposeChain(chain)
+  disposeWallet (wallet) {
+    this._registry.disposeWallet(wallet)
   }
 
   /**
@@ -184,13 +185,13 @@ export default class PolicyEngine {
   }
 
   /** @private */
-  _relevantOperations (chain, path, index) {
-    return collectReferencedOperations(this._registry.relevant(chain, path, index))
+  _relevantOperations (wallet, path, index) {
+    return collectReferencedOperations(this._registry.relevant(wallet, path, index))
   }
 
   /** @private */
   async _evaluateContext (context, { path, index }) {
-    const groups = this._registry.applicable(context.chain, path, index)
+    const groups = this._registry.applicable(context.wallet, path, index)
 
     return evaluate(context, groups, { conditionTimeoutMs: this._conditionTimeoutMs })
   }

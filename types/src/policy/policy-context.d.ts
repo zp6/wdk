@@ -15,14 +15,14 @@
  * @internal
  * @param {object} input
  * @param {string} input.operation - The wrapped operation name (e.g. 'sendTransaction').
- * @param {string} input.chain - The blockchain identifier.
+ * @param {string} input.wallet - The wallet identifier this account belongs to (the same string passed to `registerWallet`).
  * @param {IWalletAccountReadOnly} input.account - A read-only view of the wallet account.
  * @param {readonly unknown[]} input.args - The full argument array passed to the method.
- * @returns {object} A frozen context object: { operation, chain, account, params, args }.
+ * @returns {object} A frozen context object: { operation, wallet, account, params, args }.
  */
-export function buildContext({ operation, chain, account, args }: {
+export function buildContext({ operation, wallet, account, args }: {
     operation: string;
-    chain: string;
+    wallet: string;
     account: IWalletAccountReadOnly;
     args: readonly unknown[];
 }): object;
