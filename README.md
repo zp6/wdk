@@ -100,6 +100,10 @@ const result = await account.simulate.sendTransaction({ to: '0x…', value: 1n }
 
 Policies have two scopes — `project` and `account`. A project-scope policy applies globally by default, or only to the chains you bind it to (`wdk.registerPolicy('ethereum', policy)` or `wdk.registerPolicy(['ethereum', 'ton'], policy)`). An account-scope policy targets specific accounts, identified by either derivation path (`accounts: ["0'/0/0"]`) or integer index (`accounts: [0, 1]`) — index entries match accounts retrieved via `wdk.getAccount(chain, index)`; path entries match either retrieval style. Evaluation is narrowest-first with `DENY` winning across scopes. Account-scope `ALLOW` rules can opt into `override_broader_scope: true` to short-circuit broader policies for explicit exceptions (e.g., treasury wallets). Conditions can be sync or async and may carry user-owned state via closures. Templates (`@tetherto/wdk-policy-templates`) and a portal UI for editing policies are coming in later phases.
 
+### Runtime support
+
+The policy engine works on both Node.js and the Bare runtime. Behavior differs in one place: **nested-call escape**. On Node, when a wrapped method (e.g. `bridge`) internally invokes another wrapped method (e.g. `sendTransaction`), the inner call inherits the outer call's policy context and is not re-evaluated. On Bare, every wrapped call evaluates independently — including nested ones — because Bare does not yet expose `AsyncLocalStorage` (the Holepunch team is waiting on TC39 AsyncContext to reach Stage 3 + V8 implementation). This matters when, for example, a project policy denies `sendTransaction` while allowing `bridge`: on Node the `bridge` call succeeds, on Bare the inner `sendTransaction` re-trips the DENY and the bridge fails. Write your Bare-side policies so high-level operations (`bridge`, `swap`, etc.) and the underlying `sendTransaction` are both compatible with each other, or stage your DENYs at the highest-level operation only.
+
 ## Compatibility
 
 - **WDK Wallet Modules** including EVM, Solana, TON, TRON, and Bitcoin integrations

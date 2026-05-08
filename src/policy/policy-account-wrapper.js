@@ -16,6 +16,7 @@
 
 import { PROTOCOL_METHODS } from './constants.js'
 import { buildContext } from './policy-context.js'
+import { getPolicyContextStore } from './policy-context-store.js'
 import PolicyViolationError, { PolicyConfigurationError } from './policy-error.js'
 
 /** @typedef {import('@tetherto/wdk-wallet').IWalletAccount} IWalletAccount */
@@ -26,30 +27,6 @@ const PROTOCOL_GETTERS = [
   ['getLendingProtocol', 'lending'],
   ['getFiatProtocol', 'fiat']
 ]
-
-// node:async_hooks is loaded lazily so that just importing WDK on the Bare
-// runtime — where bare-async-hooks does not export AsyncLocalStorage — does
-// not break consumers that never register a policy. The error only surfaces
-// when policies are actually wrapped onto an account.
-let policyContextStorePromise = null
-
-function getPolicyContextStore () {
-  if (policyContextStorePromise) return policyContextStorePromise
-
-  policyContextStorePromise = (async () => {
-    try {
-      const mod = await import('node:async_hooks')
-
-      if (typeof mod.AsyncLocalStorage !== 'function') return null
-
-      return new mod.AsyncLocalStorage()
-    } catch {
-      return null
-    }
-  })()
-
-  return policyContextStorePromise
-}
 
 /**
  * Wraps every write method on the given account that's referenced by a
@@ -79,12 +56,6 @@ export async function applyPoliciesToAccount (account, { blockchain, path, index
   }
 
   const store = await getPolicyContextStore()
-
-  if (store === null) {
-    throw new PolicyConfigurationError(
-      'policy engine requires AsyncLocalStorage from node:async_hooks; the current runtime does not provide it.'
-    )
-  }
 
   const readOnlyAccount = await account.toReadOnlyAccount()
 
