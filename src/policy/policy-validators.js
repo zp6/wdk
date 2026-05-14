@@ -43,21 +43,22 @@ function isOperationName (value) {
 }
 
 /**
- * Normalises the wallet argument from a registerPolicy call into an array of
- * non-empty strings or `undefined` (meaning "apply to every registered wallet").
+ * Normalises the wallet field of a policy into an array of non-empty strings
+ * or `undefined` (meaning "apply to every registered wallet").
  *
  * @internal
  * @param {string | string[] | undefined} wallet
+ * @param {string} policyId - The owning policy's id, used to build error messages.
  * @returns {string[] | undefined}
  */
-export function normaliseWalletArg (wallet) {
+export function normalisePolicyWallet (wallet, policyId) {
   if (wallet === undefined) {
     return undefined
   }
 
   if (typeof wallet === 'string') {
     if (wallet.length === 0) {
-      throw new PolicyConfigurationError('registerPolicy: wallet must be a non-empty string.')
+      throw new PolicyConfigurationError(`Policy '${policyId}': 'wallet' must be a non-empty string.`)
     }
 
     return [wallet]
@@ -67,7 +68,7 @@ export function normaliseWalletArg (wallet) {
     return Array.from(new Set(wallet))
   }
 
-  throw new PolicyConfigurationError('registerPolicy: wallet must be a string or a non-empty array of strings.')
+  throw new PolicyConfigurationError(`Policy '${policyId}': 'wallet' must be a non-empty string or non-empty array of non-empty strings.`)
 }
 
 /**
@@ -95,13 +96,14 @@ export function validateRegisterOptions (options) {
 }
 
 /**
- * Validates a single policy object. Throws synchronously on the first failure.
+ * Validates a single policy object and returns the normalised wallet binding.
+ * Throws synchronously on the first failure.
  *
  * @internal
  * @param {object} policy - The policy to validate.
- * @param {string[] | undefined} wallets - The wallet(s) the policy is being registered for, after normalisation.
+ * @returns {string[] | undefined} The normalised wallet binding, or undefined for "all wallets".
  */
-export function validatePolicy (policy, wallets) {
+export function validatePolicy (policy) {
   if (!isPlainObject(policy)) {
     throw new PolicyConfigurationError('Policy: must be an object.')
   }
@@ -118,13 +120,15 @@ export function validatePolicy (policy, wallets) {
     throw new PolicyConfigurationError(`Policy '${policy.id}': 'scope' must be one of: ${SCOPES.join(', ')}.`)
   }
 
+  const wallets = normalisePolicyWallet(policy.wallet, policy.id)
+
   if (policy.scope === 'account') {
     if (!isAccountsArray(policy.accounts)) {
       throw new PolicyConfigurationError(`Policy '${policy.id}': 'accounts' is required and must be a non-empty array of derivation paths or non-negative integer indexes when scope is 'account'.`)
     }
 
     if (wallets === undefined) {
-      throw new PolicyConfigurationError(`Policy '${policy.id}': account-scope policies must be registered with a wallet argument.`)
+      throw new PolicyConfigurationError(`Policy '${policy.id}': account-scope policies must declare a 'wallet' field.`)
     }
   } else if (policy.accounts !== undefined) {
     throw new PolicyConfigurationError(`Policy '${policy.id}': 'accounts' is only allowed when scope is 'account'.`)
@@ -137,6 +141,8 @@ export function validatePolicy (policy, wallets) {
   for (const rule of policy.rules) {
     validateRule(rule, policy)
   }
+
+  return wallets
 }
 
 function validateRule (rule, policy) {

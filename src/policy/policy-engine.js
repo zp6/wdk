@@ -20,7 +20,6 @@ import { evaluate } from './policy-evaluator.js'
 import PolicyRegistry from './policy-registry.js'
 import {
   collectReferencedOperations,
-  normaliseWalletArg,
   validatePolicy,
   validateRegisterOptions
 } from './policy-validators.js'
@@ -76,6 +75,7 @@ import {
  * @property {string} id
  * @property {string} name
  * @property {PolicyScope} scope
+ * @property {string | string[]} [wallet] - The wallet identifier(s) this policy binds to. Each entry must match a string previously passed to `wdk.registerWallet`. For `scope: 'project'`, omitting `wallet` applies the policy across every registered wallet; providing one or more narrows it to those wallets. For `scope: 'account'`, `wallet` is required.
  * @property {AccountIdentifier[]} [accounts] - The accounts this policy applies to (required when scope is 'account'). Each entry is either a derivation path (exact-string match against `account.path`) or a non-negative integer (match against the index passed to `wdk.getAccount(wallet, index)`). Index entries do not match accounts retrieved via `getAccountByPath` — use derivation paths if you need both retrieval styles to work.
  * @property {PolicyRule[]} rules
  */
@@ -125,14 +125,17 @@ export default class PolicyEngine {
 
   /**
    * Registers one or more policies. Synchronously throws on validation failures.
+   * Validation runs to completion before any registry mutation, so a failure
+   * never leaves the engine partially mutated.
    *
-   * @param {string | string[] | undefined} wallet
    * @param {Policy | Policy[]} policies
    * @param {RegisterPolicyOptions} [options]
+   * @param {{ knownWallets?: Set<string> }} [registrationContext] - Optional
+   *   set of registered wallet identifiers. When provided, the engine verifies
+   *   every wallet binding referenced by the policies is in this set before
+   *   touching the registry.
    */
-  register (wallet, policies, options) {
-    const wallets = normaliseWalletArg(wallet)
-
+  register (policies, options, registrationContext) {
     validateRegisterOptions(options)
 
     const list = Array.isArray(policies) ? policies : [policies]
@@ -141,13 +144,25 @@ export default class PolicyEngine {
       throw new PolicyConfigurationError('Policy: must be an object or a non-empty array of objects.')
     }
 
-    for (const policy of list) {
-      validatePolicy(policy, wallets)
+    const walletsPerPolicy = list.map((policy) => validatePolicy(policy))
+
+    const knownWallets = registrationContext?.knownWallets
+
+    if (knownWallets) {
+      for (const wallets of walletsPerPolicy) {
+        if (!wallets) continue
+
+        for (const w of wallets) {
+          if (!knownWallets.has(w)) {
+            throw new PolicyConfigurationError(`registerPolicy: no wallet registered with identifier '${w}'.`)
+          }
+        }
+      }
     }
 
-    for (const policy of list) {
-      this._registry.add(policy, wallets)
-    }
+    list.forEach((policy, i) => {
+      this._registry.add(policy, walletsPerPolicy[i])
+    })
 
     if (options?.conditionTimeoutMs !== undefined) {
       this._conditionTimeoutMs = options.conditionTimeoutMs

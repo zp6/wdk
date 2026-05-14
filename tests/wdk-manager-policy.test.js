@@ -117,20 +117,20 @@ describe('WdkManager — policy engine', () => {
       expect(result).toBe(wdkManager)
     })
 
-    test('accepts a wallet identifier as first argument', () => {
+    test("accepts a 'wallet' field inside the policy object", () => {
       wdkManager.registerWallet('ethereum', WalletManagerMock, {})
 
-      const result = wdkManager.registerPolicy('ethereum', projectAllowAll('p'))
+      const result = wdkManager.registerPolicy({ ...projectAllowAll('p'), wallet: 'ethereum' })
 
       expect(result).toBe(wdkManager)
     })
 
-    test('accepts a wallet identifier array as first argument', () => {
+    test("accepts a 'wallet' field as an array inside the policy object", () => {
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
         .registerWallet('ton', WalletManagerMock, {})
 
-      const result = wdkManager.registerPolicy(['ethereum', 'ton'], projectAllowAll('p'))
+      const result = wdkManager.registerPolicy({ ...projectAllowAll('p'), wallet: ['ethereum', 'ton'] })
 
       expect(result).toBe(wdkManager)
     })
@@ -152,10 +152,33 @@ describe('WdkManager — policy engine', () => {
     })
 
     test('throws PolicyConfigurationError when wallet is not registered', () => {
-      const err = catchSync(() => wdkManager.registerPolicy('mars', projectAllowAll('p')))
+      const err = catchSync(() => wdkManager.registerPolicy({ ...projectAllowAll('p'), wallet: 'mars' }))
 
       expect(err.name).toBe('PolicyConfigurationError')
       expect(err.message).toBe("registerPolicy: no wallet registered with identifier 'mars'.")
+    })
+
+    test('throws PolicyConfigurationError when one entry in a wallet array is not registered', () => {
+      wdkManager.registerWallet('ethereum', WalletManagerMock, {})
+
+      const err = catchSync(() => wdkManager.registerPolicy({ ...projectAllowAll('p'), wallet: ['ethereum', 'mars'] }))
+
+      expect(err.name).toBe('PolicyConfigurationError')
+      expect(err.message).toBe("registerPolicy: no wallet registered with identifier 'mars'.")
+    })
+
+    test("throws PolicyConfigurationError when 'wallet' is an empty string", () => {
+      const err = catchSync(() => wdkManager.registerPolicy({ ...projectAllowAll('p'), wallet: '' }))
+
+      expect(err.name).toBe('PolicyConfigurationError')
+      expect(err.message).toBe("Policy 'p': 'wallet' must be a non-empty string.")
+    })
+
+    test("throws PolicyConfigurationError when 'wallet' is an empty array", () => {
+      const err = catchSync(() => wdkManager.registerPolicy({ ...projectAllowAll('p'), wallet: [] }))
+
+      expect(err.name).toBe('PolicyConfigurationError')
+      expect(err.message).toBe("Policy 'p': 'wallet' must be a non-empty string or non-empty array of non-empty strings.")
     })
 
     test("throws PolicyConfigurationError on missing 'id'", () => {
@@ -228,14 +251,14 @@ describe('WdkManager — policy engine', () => {
       expect(err.message).toBe("Rule 'r' in policy 'p': condition at index 0 must be a function.")
     })
 
-    test('throws PolicyConfigurationError on account-scope without wallet', () => {
+    test("throws PolicyConfigurationError on account-scope without a 'wallet' field", () => {
       wdkManager.registerWallet('ethereum', WalletManagerMock, {})
 
       const policy = { id: 'p', name: 'p', scope: 'account', accounts: [PATH_DEFAULT], rules: [{ name: 'r', operation: 'sendTransaction', action: 'ALLOW', conditions: [] }] }
       const err = catchSync(() => wdkManager.registerPolicy(policy))
 
       expect(err.name).toBe('PolicyConfigurationError')
-      expect(err.message).toBe("Policy 'p': account-scope policies must be registered with a wallet argument.")
+      expect(err.message).toBe("Policy 'p': account-scope policies must declare a 'wallet' field.")
     })
 
     test('throws PolicyConfigurationError when accounts is provided on non-account scope', () => {
@@ -320,10 +343,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'eth-deny',
           name: 'eth-deny',
           scope: 'project',
+          wallet: 'ethereum',
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
 
@@ -358,10 +382,11 @@ describe('WdkManager — policy engine', () => {
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
         .registerWallet('ton', WalletManagerMock, {})
-        .registerPolicy(['ethereum', 'ton'], {
+        .registerPolicy({
           id: 'multi-chain',
           name: 'multi-chain',
           scope: 'project',
+          wallet: ['ethereum', 'ton'],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
 
@@ -741,17 +766,19 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'account-allow',
           name: 'account-allow',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [PATH_DEFAULT],
           rules: [{ name: 'allow', operation: 'sendTransaction', action: 'ALLOW', conditions: [] }]
         })
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'eth-deny',
           name: 'eth-deny',
           scope: 'project',
+          wallet: 'ethereum',
           rules: [{ name: 'edeny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
 
@@ -768,10 +795,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'agent-limits',
           name: 'agent-limits',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [PATH_DEFAULT],
           rules: [{
             name: 'allow-small',
@@ -805,10 +833,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'treasury',
           name: 'treasury',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [PATH_DEFAULT],
           rules: [{
             name: 'treasury-allow',
@@ -818,10 +847,11 @@ describe('WdkManager — policy engine', () => {
             conditions: [({ params }) => BigInt(params.value) <= 100n]
           }]
         })
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'eth-deny',
           name: 'eth-deny',
           scope: 'project',
+          wallet: 'ethereum',
           rules: [{ name: 'edeny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
         .registerPolicy({
@@ -842,10 +872,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'treasury',
           name: 'treasury',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [PATH_DEFAULT],
           rules: [{
             name: 'treasury-allow',
@@ -880,10 +911,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'agent-deny',
           name: 'agent-deny',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [PATH_SECONDARY],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
@@ -911,10 +943,11 @@ describe('WdkManager — policy engine', () => {
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
         .registerWallet('ton', WalletManagerMock, {})
-        .registerPolicy(['ethereum', 'ton'], {
+        .registerPolicy({
           id: 'multi',
           name: 'multi',
           scope: 'project',
+          wallet: ['ethereum', 'ton'],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
 
@@ -1620,10 +1653,11 @@ describe('WdkManager — policy engine', () => {
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
         .registerWallet('ton', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'eth-only',
           name: 'eth-only',
           scope: 'project',
+          wallet: 'ethereum',
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
 
@@ -1667,10 +1701,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'cold-storage',
           name: 'cold-storage',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [0],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
@@ -1690,10 +1725,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'mixed',
           name: 'mixed',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [0, "0'/0/2"],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
@@ -1716,10 +1752,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'index-only',
           name: 'index-only',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: [0],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
@@ -1736,10 +1773,11 @@ describe('WdkManager — policy engine', () => {
 
       wdkManager
         .registerWallet('ethereum', WalletManagerMock, {})
-        .registerPolicy('ethereum', {
+        .registerPolicy({
           id: 'path-bound',
           name: 'path-bound',
           scope: 'account',
+          wallet: 'ethereum',
           accounts: ["0'/0/5"],
           rules: [{ name: 'deny', operation: 'sendTransaction', action: 'DENY', conditions: [] }]
         })
@@ -1760,8 +1798,8 @@ describe('WdkManager — policy engine', () => {
       const cases = [-1, 1.5, NaN, '', null, undefined, true, {}]
 
       for (const value of cases) {
-        const policy = { id: 'p', name: 'p', scope: 'account', accounts: [value], rules: [{ name: 'r', operation: 'sendTransaction', action: 'ALLOW', conditions: [] }] }
-        const err = catchSync(() => wdkManager.registerPolicy('ethereum', policy))
+        const policy = { id: 'p', name: 'p', scope: 'account', wallet: 'ethereum', accounts: [value], rules: [{ name: 'r', operation: 'sendTransaction', action: 'ALLOW', conditions: [] }] }
+        const err = catchSync(() => wdkManager.registerPolicy(policy))
 
         expect(err.name).toBe('PolicyConfigurationError')
         expect(err.message).toBe("Policy 'p': 'accounts' is required and must be a non-empty array of derivation paths or non-negative integer indexes when scope is 'account'.")

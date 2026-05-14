@@ -82,33 +82,21 @@ export default class WDK {
      * Registers one or more transaction policies that will be evaluated before
      * any wrapped account or protocol method is allowed to execute.
      *
-     * The first argument may be a wallet identifier (string), a list of
-     * wallet identifiers (string[]), or omitted entirely. The wallet identifier
-     * is the same string passed to `registerWallet` — it might be a chain name
-     * like `"ethereum"`, but it could equally be `"treasury-cold"` or any
-     * label the consumer chose. When omitted, project-scope policies are
-     * applied across every registered wallet. When provided, project-scope
-     * policies are narrowed to those wallets and account-scope policies are
-     * bound to them.
+     * Each policy's `wallet` field (optional for `scope: 'project'`, required
+     * for `scope: 'account'`) declares which wallet identifier(s) it binds to.
+     * A wallet identifier is the same string passed to `registerWallet` — it
+     * might be a chain name like `"ethereum"`, but it could equally be
+     * `"treasury-cold"` or any label the consumer chose. Omitting `wallet` on
+     * a project-scope policy applies it across every registered wallet.
      *
      * Multiple `registerPolicy` calls stack. If a policy with the same id is
-     * registered twice into the same wallet binding, the second call replaces
-     * the first.
+     * registered twice into the same binding, the second call replaces the first.
      *
-     * @overload
-     * @param {Policy | Policy[]} policies
+     * @param {Policy | Policy[]} policies - A single policy or array of policies.
      * @param {RegisterPolicyOptions} [options]
      * @returns {WDK}
      */
     registerPolicy(policies: Policy | Policy[], options?: RegisterPolicyOptions): WDK;
-    /**
-     * @overload
-     * @param {string | string[]} wallet
-     * @param {Policy | Policy[]} policies
-     * @param {RegisterPolicyOptions} [options]
-     * @returns {WDK}
-     */
-    registerPolicy(wallet: string | string[], policies: Policy | Policy[], options?: RegisterPolicyOptions): WDK;
     /**
      * Returns the wallet account for a specific blockchain and index (see BIP-44).
      *

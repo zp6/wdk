@@ -5,12 +5,19 @@ export default class PolicyEngine {
     private _conditionTimeoutMs;
     /**
      * Registers one or more policies. Synchronously throws on validation failures.
+     * Validation runs to completion before any registry mutation, so a failure
+     * never leaves the engine partially mutated.
      *
-     * @param {string | string[] | undefined} wallet
      * @param {Policy | Policy[]} policies
      * @param {RegisterPolicyOptions} [options]
+     * @param {{ knownWallets?: Set<string> }} [registrationContext] - Optional
+     *   set of registered wallet identifiers. When provided, the engine verifies
+     *   every wallet binding referenced by the policies is in this set before
+     *   touching the registry.
      */
-    register(wallet: string | string[] | undefined, policies: Policy | Policy[], options?: RegisterPolicyOptions): void;
+    register(policies: Policy | Policy[], options?: RegisterPolicyOptions, registrationContext?: {
+        knownWallets?: Set<string>;
+    }): void;
     /**
      * Returns a policy-enforced view of the given account — a Proxy that
      * exposes enforced versions of write methods. The original account is
@@ -100,6 +107,10 @@ export type Policy = {
     id: string;
     name: string;
     scope: PolicyScope;
+    /**
+     * - The wallet identifier(s) this policy binds to. Each entry must match a string previously passed to `wdk.registerWallet`. For `scope: 'project'`, omitting `wallet` applies the policy across every registered wallet; providing one or more narrows it to those wallets. For `scope: 'account'`, `wallet` is required.
+     */
+    wallet?: string | string[];
     /**
      * - The accounts this policy applies to (required when scope is 'account'). Each entry is either a derivation path (exact-string match against `account.path`) or a non-negative integer (match against the index passed to `wdk.getAccount(wallet, index)`). Index entries do not match accounts retrieved via `getAccountByPath` — use derivation paths if you need both retrieval styles to work.
      */
